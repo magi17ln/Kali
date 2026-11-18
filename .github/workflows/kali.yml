@@ -13,10 +13,19 @@ jobs:
         KALI_PASSWORD: ${{ secrets.KALI_PASSWORD }}
       run: |
         docker run -d --name kali -p 2222:22 kalilinux/kali-rolling sleep infinity
-        docker exec kali bash -c "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-server sudo kali-linux-headless || true"
-        docker exec kali bash -c "mkdir -p /run/sshd && sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config"
-        echo "root:${KALI_PASSWORD}" | docker exec -i kali chpasswd
-        docker exec -d kali /usr/sbin/sshd -D
+        docker exec kali bash -c "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-server sudo passwd"
+        docker exec kali bash -c "mkdir -p /run/sshd && ssh-keygen -A"
+        printf 'root:%s\n' "$KALI_PASSWORD" | docker exec -i kali chpasswd
+        docker exec -d kali /usr/sbin/sshd -D -o PermitRootLogin=yes -o PasswordAuthentication=yes -o UsePAM=no
+        sleep 3
+
+    - name: Self-test password login
+      env:
+        KALI_PASSWORD: ${{ secrets.KALI_PASSWORD }}
+      run: |
+        sudo apt-get install -y sshpass
+        echo "Длина пароля в секрете: ${#KALI_PASSWORD}"
+        sshpass -p "$KALI_PASSWORD" ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -p 2222 root@127.0.0.1 'echo LOGIN_OK; head -1 /etc/os-release' || echo "LOGIN_FAILED"
 
     - name: Download ngrok
       run: |
