@@ -1,0 +1,32 @@
+name: Kali
+
+on: workflow_dispatch
+
+jobs:
+  kali:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+    - name: Start Kali container with SSH
+      env:
+        KALI_PASSWORD: ${{ secrets.KALI_PASSWORD }}
+      run: |
+        docker run -d --name kali -p 2222:22 kalilinux/kali-rolling sleep infinity
+        docker exec kali bash -c "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y openssh-server sudo kali-linux-headless || true"
+        docker exec kali bash -c "mkdir -p /run/sshd && sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config"
+        echo "root:${KALI_PASSWORD}" | docker exec -i kali chpasswd
+        docker exec -d kali /usr/sbin/sshd -D
+
+    - name: Download ngrok
+      run: |
+        curl -sSL https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz -o ngrok.tgz
+        tar -xzf ngrok.tgz
+
+    - name: Auth ngrok
+      env:
+        NGROK_AUTH_TOKEN: ${{ secrets.NGROK_AUTH_TOKEN }}
+      run: ./ngrok authtoken "$NGROK_AUTH_TOKEN"
+
+    - name: Create tunnel
+      run: ./ngrok tcp 2222 --log stdout
